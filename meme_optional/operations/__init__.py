@@ -1,9 +1,10 @@
-from meme_generator import MemeArgsModel, MemeArgsParser, add_meme, MemeArgsType
+from meme_generator import MemeArgsModel, ParserOption, add_meme, MemeArgsType
 from meme_generator.utils import make_jpg_or_gif, BuildImage, save_gif
 from io import BytesIO
 from PIL import Image, ImageOps, ImageFilter
 from pydantic import Field
 from typing import List
+from arclet.alconna.action import store, store_true
 
 help_fliph = "水平翻转图片"
 help_flipv = "垂直翻转图片"
@@ -14,6 +15,22 @@ help_emboss = "图片转换为浮雕"
 help_contour = "提取图片轮廓"
 help_sharpen = "锐化图片"
 help_reverse = "如果是动图，反转动图序列"
+
+class MemeArgsParser:
+    _action_dict = {
+        'store': store,
+        'store_true': store_true,
+    }
+    def __init__(self, prefix_chars: str = "-"):
+        self.prefix_chars = prefix_chars
+        self.options = []
+
+    def add_argument(self, *names, action=None, help=None):
+        self.options.append(ParserOption(
+            names=list(names),
+            action=MemeArgsParser._action_dict[action],
+            help_text=help,
+        ))
 
 parser = MemeArgsParser(prefix_chars="-/")
 parser.add_argument("--fliph", "/水平翻转", action="store_true", help=help_fliph)
@@ -40,7 +57,7 @@ class Model(MemeArgsModel):
 
 
 # noinspection PyUnusedLocal
-def operations(images: List[BuildImage], texts: List[str], args) -> BytesIO:
+def operations(images: List[BuildImage], texts: List[str], args: Model) -> BytesIO:
     user_img = images[0]
     if args.reverse and getattr(user_img.image, "is_animated", False):
         duration = user_img.image.info["duration"] / 5000
@@ -82,7 +99,7 @@ add_meme(
     min_images=1,
     max_images=1,
     args_type=MemeArgsType(
-        parser, Model,
+        Model,
         [
             Model(fliph=False), Model(fliph=True),
             Model(flipv=False), Model(flipv=True),
@@ -93,7 +110,8 @@ add_meme(
             Model(contour=False), Model(contour=True),
             Model(sharpen=False), Model(sharpen=True),
             Model(reverse=False), Model(reverse=True),
-        ]
+        ],
+        parser.options
     ),
     keywords=["图片操作"],
 )

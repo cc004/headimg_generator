@@ -17,13 +17,13 @@ from hoshino.typing import CQEvent, MessageSegment, Message
 from meme_generator.download import check_resources
 from meme_generator.exception import (
     TextOverLength,
+    ArgParserMismatch,
     ArgMismatch,
     TextOrNameNotEnough,
-    MemeGeneratorException,
-    ArgParserExit
+    MemeGeneratorException
 )
 from meme_generator.meme import Meme
-from meme_generator.utils import TextProperties, render_meme_list
+from meme_generator.utils import MemeProperties, render_meme_list
 from pypinyin import Style, pinyin
 
 from .config import memes_prompt_params_error, meme_command_start
@@ -32,6 +32,8 @@ from .depends import split_msg_v11
 from .exception import NetworkError, PlatformUnsupportError
 from .manager import ActionResult, MemeMode, meme_manager
 from .utils import meme_info
+
+from arclet.alconna import Alconna, Args, MultiVar
 
 memes_cache_dir = Path(os.path.join(os.path.dirname(__file__), "memes_cache_dir"))
 
@@ -83,8 +85,8 @@ async def help_cmd(bot: HoshinoBot, ev: CQEvent):
     meme_list = [
         (
             meme,
-            TextProperties(
-                fill="black" if meme_manager.check(user_id, meme.key) else "lightgrey"
+            MemeProperties(
+                disabled=not meme_manager.check(user_id, meme.key)
             ),
         )
         for meme in memes
@@ -339,18 +341,25 @@ async def handle(bot: HoshinoBot, ev: CQEvent):
 
     args: Dict[str, Any] = {}
 
+    
     if meme.params_type.args_type:
-        try:
-            parse_result = meme.parse_args(raw_texts)
-        except ArgParserExit:
+        parser = Alconna(
+            Args["texts", MultiVar(str, "*")],
+            *[option.option() for option in meme.params_type.args_type.parser_options]
+        )
+        parse_result = parser.parse(raw_texts)
+        
+        if not parse_result.matched:
             await bot.send(ev, f"参数解析错误")
             return
-        texts = parse_result["texts"]
-        parse_result.pop("texts")
-        args = parse_result
+        
+        texts = list(parse_result.args["texts"])
+        args = parse_result.options
     else:
         texts = raw_texts
-
+    
+    texts = raw_texts
+    
     if not (
             meme.params_type.min_images
             <= len(image_sources)
